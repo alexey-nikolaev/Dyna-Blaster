@@ -1,0 +1,3 @@
+title=Dyna Blaster
+author=Alexey Nikolaev
+orientation=portrait
