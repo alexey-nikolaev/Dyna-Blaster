@@ -28,7 +28,8 @@ Window.clearcolor = [25/255., 25/255., 112/255., 1]
 
 # load fonts
 from kivy.core.text import LabelBase
-LabelBase.register(name="PressStart2P", fn_regular=join("fonts", "PressStart2P.ttf"))
+LabelBase.register(name="PressStart2P", 
+                   fn_regular=join("fonts", "PressStart2P.ttf"))
 
 #load sounds
 s_intro = SoundLoader.load(join('sounds', 'intro.mp3'))
@@ -52,6 +53,7 @@ mflag = False # hero movement flag (including waiting list)
 anim_flag = False # hero animation flag
 waiting = [] # command waiting list
 game_ended = False # game end flag
+tutorial_mode = False # tutorial mode flag
 
 # world frame
 a = min(Window.width, Window.height)
@@ -101,22 +103,13 @@ Builder.load_string('''
                     id: start_text
                     size_hint: 1, .5
                     
-    Screen:
+    GameScreen:
         id: game_screen
         name: 'game screen'
         
         Game:
             id: game
             name: 'game'
-                
-    Screen:
-        id: tutorial_screen
-        name: 'tutorial'
-        
-        StartText:
-            id: tutorial
-            text: 'tutorial'
-            on_touch_down: root.current = 'start screen'
     
     HighscoreScreen:
         id: highscore_screen
@@ -127,6 +120,22 @@ Builder.load_string('''
             text: 'highscore'
             on_touch_down: root.current = 'start screen'
 ''')
+
+class TutorialLabel(Widget):
+    def __init__(self, text, **kwargs):
+        super(TutorialLabel, self).__init__(**kwargs)
+        self.size_hint=(1.,.2)
+        self.pos_hint={'center_x':.5, 'center_y': .1}
+        self.bind(size=self.draw, pos=self.draw, center_x=self.draw, center_y=self.draw)
+        self.name='tutorial label'
+        self.text=text
+    def draw(self, *args):
+        self.canvas.clear()
+        self.clear_widgets()
+        with self.canvas:
+            self.color = Color(0,192./255.,235./255.,1)
+            self.rect = Rectangle(size=self.size, pos=self.pos)
+        self.add_widget(Label(text=self.text, size=self.size, pos=self.pos, font_name='PressStart2P', font_size='12sp'))
     
 class StartText(Label):
     def __init__(self, **kwargs):
@@ -137,6 +146,16 @@ class StartText(Label):
         #self.size = self.texture_size
         #self.text_size = self.size
         self.markup = True
+        
+class GameScreen(Screen):
+    def __init__(self, **kwargs):
+        super(GameScreen, self).__init__(**kwargs)
+    def on_enter(self, *args):
+        if tutorial_mode:
+            m = 0.05*a
+            hero1.pos_hint = {'x': (m+0.09*a)/Window.width, 'y': (b-0.24*a)/Window.height}
+            hero2.pos_hint = {'x': (m+0.09*a*6)/Window.width, 'y': (b-0.24*a)/Window.height}
+            Clock.schedule_once(self.children[0].show_tutorial, 1.)
         
 class HighscoreScreen(Screen):
     def __init__(self, **kwargs):
@@ -818,7 +837,10 @@ class FireBttn(Button):
     def release_fire(self, *args):
         self.fire_waiting = False
     def fire(self, *args):
-        if self.fire_waiting and active_hero.st == 0 and not anim_flag and not (active_hero.model == 'warrior_m' and active_hero.y < world_bottom + 0.09*a) and not active_hero.protected: # red fire prohibited at home and under protection
+        if tutorial_mode or (self.fire_waiting and active_hero.st == 0 
+        and not anim_flag and not (active_hero.model == 'warrior_m' and 
+        active_hero.y < world_bottom + 0.09*a) and not active_hero.protected): 
+        # red fire prohibited at home and under protection
             if active_hero.model == 'warrior_m':
                 color = [1, 0, 0]
             else: color = [0, 1, 0]
@@ -900,7 +922,9 @@ class ProtectBttn(Button):
         self.bind(on_press=self.schedule_protect)
     def schedule_protect(self, *args):
         if self.parent.name == 'start_layout': # alternative actions on start screen
-            self.parent.parent.parent.current = 'tutorial' # change current screenmanager's screen
+            self.parent.parent.parent.current = 'game screen' # change current screenmanager's screen
+            global tutorial_mode
+            tutorial_mode = True
         elif game_ended:
             App.get_running_app().stop() # quit game
         else:
@@ -933,7 +957,7 @@ class ProtectionFrame(Widget):
         self.name = 'protection'
         self.center_x, self.center_y = pos_x*Window.width+0.045*a, pos_y*Window.height+0.045*a
         with self.canvas:
-            self.color = Color(124./255.,252./255.,0,1)
+            self.color = Color(102./255.,217./255.,1.,1)
             Line(points=[self.center_x-0.09*a, self.center_y+0.09*a, self.center_x+0.09*a, self.center_y+0.09*a, self.center_x+0.09*a, self.center_y-0.09*a, self.center_x-0.09*a, self.center_y-0.09*a], width=5, cap='square', joint='miter', close=True)
         Clock.schedule_once(self.die, 5.) # protection ends after 5 seconds
     def die(self, dt):
@@ -1094,7 +1118,9 @@ class Game(FloatLayout):
             hero_obj.hearts.append(heart)
             self.add_widget(heart)
         # add controller
-        self.add_widget(Controller())
+        global controller
+        controller = Controller()
+        self.add_widget(controller)
         # add scorer
         global scorer
         scorer = Scorer()
@@ -1196,6 +1222,62 @@ class Game(FloatLayout):
         timestamp = datetime.strftime(datetime.now(), '%Y-%m-%d %H:%M')
         score = str(scorer.score)
         storage.put('highscore', score = score, datetime = timestamp)
+    def show_tutorial(self, *args):
+        global tutorial_label
+        tutorial_label = TutorialLabel('hero 1 (male)\nis set active\nwhen game starts')
+        tutorial_label.pos_hint = controller.pos_hint
+        tutorial_label.size_hint = controller.size_hint
+        firebttn.parent.add_widget(tutorial_label)
+        def step_0(self, *args):
+            tutorial_label.text='you can see his life\nindicators (hearts)in\nthe upper left corner'
+            tutorial_label.draw()
+        def step_1(self, *args):
+            tutorial_label.text='you start at home\n(upper green row)\nwhere you are safe'
+            tutorial_label.draw()
+        def step_2(self, *args):
+            tutorial_label.text='use gamepad arrow\nkeys to move hero'
+            tutorial_label.draw()
+        def step_3(self, *args):
+            hero1.move('right')
+            global waiting
+            waiting = ['down']
+        def step_4(self, *args):
+            tutorial_label.text='press F to create red\nfire around hero'
+            tutorial_label.draw()
+        def step_5(self, *args):
+            tutorial_label.text='red fire\ndestroys enemies\nand burns trees\nyou cannot use\nit at home'
+            tutorial_label.draw()
+        def step_6(self, *args):
+            firebttn.fire()
+            hero1.move('right')
+        def step_7(self, *args):
+            firebttn.fire()
+            tutorial_label.text='items can be\ndiscovered when\nburning trees'
+            tutorial_label.draw()
+        def step_8(self, *args):
+            tutorial_label.text='press H2 to activate\nhero 2 (female)'
+            tutorial_label.draw()
+            global active_hero
+            active_hero = hero2
+        def step_9(self, *args):
+            tutorial_label.text='hero 2 produces\ngreen fire which\ncan grow forests'
+            tutorial_label.draw()
+            hero2.move('right')
+            global waiting
+            waiting = ['down']
+        def step_10(self, *args):
+            tutorial_label.text='forests are used\nby both heroes\nfor walking'
+            tutorial_label.draw()
+        def step_11(self, *args):
+            tutorial_label.text='hero falls while\nnot in forest\nand does not stand\non a rock'
+            tutorial_label.draw()
+        def step_12(self, *args):
+            tutorial_label.text='next'
+            tutorial_label.draw()
+        steps = [step_0, step_1, step_2, step_3, step_4, step_5, step_6, 
+                 step_7, step_8, step_9, step_10, step_11, step_12]
+        for i, step in enumerate(steps):
+            Clock.schedule_once(step, 10.*(i+1))
                
 class MainFrame(ScreenManager):
     def __init__(self, **kwargs):
