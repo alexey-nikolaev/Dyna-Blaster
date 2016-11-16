@@ -1,4 +1,4 @@
-from random import choice, shuffle, randint
+from random import choice, shuffle, randint, seed
 from math import sin, cos, atan, pi, ceil
 from datetime import datetime
 from os.path import join
@@ -102,6 +102,10 @@ Builder.load_string('''
                 StartText:
                     id: start_text
                     size_hint: 1, .5
+    
+    BlankScreen:
+        id: blank_screen
+        name: 'blank screen'
                     
     GameScreen:
         id: game_screen
@@ -125,7 +129,7 @@ class TutorialLabel(Widget):
     def __init__(self, text, **kwargs):
         super(TutorialLabel, self).__init__(**kwargs)
         self.size_hint=(1.,.2)
-        self.pos_hint={'center_x':.5, 'center_y': .1}
+        self.pos_hint={'center_x':.5, 'center_y': .5}
         self.bind(size=self.draw, pos=self.draw, center_x=self.draw, center_y=self.draw)
         self.name='tutorial label'
         self.text=text
@@ -135,7 +139,7 @@ class TutorialLabel(Widget):
         with self.canvas:
             self.color = Color(0,192./255.,235./255.,1)
             self.rect = Rectangle(size=self.size, pos=self.pos)
-        self.add_widget(Label(text=self.text, size=self.size, pos=self.pos, font_name='PressStart2P', font_size='12sp'))
+        self.add_widget(Label(text=self.text, size=self.size, pos=self.pos, font_name='PressStart2P', font_size='14sp'))
     
 class StartText(Label):
     def __init__(self, **kwargs):
@@ -147,15 +151,25 @@ class StartText(Label):
         #self.text_size = self.size
         self.markup = True
         
+# blank screens used to avoid text blinking
+class BlankScreen(Screen):
+    def __init__(self, **kwargs):
+        super(BlankScreen, self).__init__(**kwargs)
+    def on_enter(self, *args):
+        self.parent.current = 'game screen'
+        
 class GameScreen(Screen):
     def __init__(self, **kwargs):
         super(GameScreen, self).__init__(**kwargs)
     def on_enter(self, *args):
         if tutorial_mode:
+            self.children[0].restart(True) # restart in fixed layout mode
             m = 0.05*a
             hero1.pos_hint = {'x': (m+0.09*a)/Window.width, 'y': (b-0.24*a)/Window.height}
-            hero2.pos_hint = {'x': (m+0.09*a*6)/Window.width, 'y': (b-0.24*a)/Window.height}
+            hero2.pos_hint = {'x': (m+0.09*a*3)/Window.width, 'y': (b-0.24*a)/Window.height}
             Clock.schedule_once(self.children[0].show_tutorial, 1.)
+        else:
+            self.children[0].restart(False) # restart in random layout mode
         
 class HighscoreScreen(Screen):
     def __init__(self, **kwargs):
@@ -765,8 +779,11 @@ class CtrlBttn(Button):
             else:
                 dkeys = {'0':'up', '1':'right', '2':'down', '3':'left'}
                 if not dkeys[active_hero.drct] == 'down': # don't append commands if they lead down
-                    global waiting
-                    waiting.append(self.name)
+                    if len(waiting) < 2: # maximal command waiting list length is 2
+                        global waiting
+                        waiting.append(self.name)
+                    else:
+                        pass
         else:
             return False # unschedule event
 
@@ -825,9 +842,9 @@ class FireBttn(Button):
             def loop_sound(*args):
                 Clock.schedule_interval(play_sound, .001)
             Clock.schedule_once(loop_sound, 2.)
-            self.parent.parent.parent.current = 'game screen' # change current screenmanager's screen
+            self.parent.parent.parent.current = 'blank screen' # change current screenmanager's screen
         elif game_ended:
-            self.parent.restart()
+            self.parent.restart(False)
         else:
             if not self.fire_waiting and not (active_hero.model == 'warrior_m' and active_hero.center_y > world_top - 0.09*a): # red fire prohibited at home
                 self.fire_waiting = True
@@ -922,7 +939,7 @@ class ProtectBttn(Button):
         self.bind(on_press=self.schedule_protect)
     def schedule_protect(self, *args):
         if self.parent.name == 'start_layout': # alternative actions on start screen
-            self.parent.parent.parent.current = 'game screen' # change current screenmanager's screen
+            self.parent.parent.parent.current = 'blank screen' # change current screenmanager's screen
             global tutorial_mode
             tutorial_mode = True
         elif game_ended:
@@ -934,7 +951,7 @@ class ProtectBttn(Button):
                 for i in range(int(10./active_hero.speed)+1):
                     Clock.schedule_once(self.protect, i/10.)
     def protect(self, *args):
-        if self.protect_waiting and active_hero.st == 0 and not anim_flag:
+        if tutorial_mode or (self.protect_waiting and active_hero.st == 0 and not anim_flag):
             # 2 heroes can't be protected at the same time
             for hero in [hero1, hero2]:
                 if hero.protected:
@@ -1021,11 +1038,24 @@ class StartLayout(FloatLayout):
         protectbttn = ProtectBttn()
         self.add_widget(protectbttn)
         self.add_widget(Controller())
-            
+
+class TutorialHighlighter(Widget):
+    def __init__(self, pos_x, pos_y, size_x, size_y, **kwargs):
+        super(TutorialHighlighter, self).__init__(**kwargs)
+        self.pos_hint={'x':pos_x, 'y':pos_y}
+        self.size_hint=(size_x, size_y)
+        self.name = 'highlighter'
+        p_x, p_y, s_x, s_y = self.pos_hint['x']*Window.width, self.pos_hint['y']*Window.height, self.size_hint[0]*Window.width, self.size_hint[1]*Window.height
+        with self.canvas:
+            self.color = Color(102./255.,217./255.,1.,1)
+            Line(points=[p_x, p_y, p_x, p_y+s_y, p_x+s_x, p_y+s_y, p_x+s_x, p_y], width=2, cap='square', joint='miter', close=True) # draw rectangle of lines
+    def die(self, dt):
+        firebttn.parent.remove_widget(self)
+        
 class Game(FloatLayout):
-    def restart(self, *args):
+    def restart(self, fixed, *args):
         self.clear_widgets()
-        self.__init__()
+        self.__init__(fixed)
         global game_ended
         game_ended = False
         global mflag
@@ -1036,11 +1066,15 @@ class Game(FloatLayout):
         waiting = []
         s_game.volume = 1
         s_game.play()
-    def __init__(self, **kwargs):
+    def __init__(self, fixed=True, **kwargs):
         super(Game, self).__init__(**kwargs)
         self.name = 'game layout'
         p1, p2 = a*0.18/Window.width, a*0.18/Window.height
         m = a*0.05
+        if fixed: 
+            seed(1) # set 0 random seed for reproducible results in random numbers generator
+        else:
+            seed()
         # add landscape containers for area where forest can emerge (10x10)
         for i in range(10):
             for j in range(10):
@@ -1087,8 +1121,16 @@ class Game(FloatLayout):
         global active_hero
         active_hero = hero1
         # add controls
-        for i, drct in zip(range(4), ['up','down','left','right']):
-            self.add_widget(CtrlBttn(drct))
+        global up_bttn
+        up_bttn = CtrlBttn('up')
+        global down_bttn
+        down_bttn = CtrlBttn('down')
+        global left_bttn
+        left_bttn = CtrlBttn('left')
+        global right_bttn
+        right_bttn = CtrlBttn('right')
+        for bttn in [up_bttn, down_bttn, left_bttn, right_bttn]:
+            self.add_widget(bttn)
         self.add_widget(BaseBttn())
         global firebttn
         firebttn = FireBttn() # anchor widget to determine Game class instance as its parent
@@ -1102,10 +1144,8 @@ class Game(FloatLayout):
         global protectbttn
         protectbttn = ProtectBttn()
         self.add_widget(protectbttn)
-        # add enemies
-        for i in range(-1,2):
-            self.add_enemy(i)
-        Clock.schedule_interval(self.control_enemies_number, 10.) # add new enemy every 10 seconds if conditions are met
+        # add new enemy every 10 seconds if conditions are met
+        Clock.schedule_interval(self.control_enemies_number, 10.)
         # add hearts
         for i in range(6):
             if i<3: 
@@ -1170,7 +1210,7 @@ class Game(FloatLayout):
         self.add_widget(enemy)
         enemy.move(drct)
     def control_enemies_number(self, *args):
-        if not game_ended:
+        if (not game_ended) and (not tutorial_mode):
             c=0 # enemies counter
             for wid in self.children:
                 if wid.name == 'enemy':
@@ -1191,6 +1231,8 @@ class Game(FloatLayout):
                                 level = choice([0,-1])
                             break
                 self.add_enemy(level)
+        else:
+            return False # unschedule event
     def end_game(self, hero_num, *args):
         global game_ended
         game_ended = True
@@ -1225,59 +1267,132 @@ class Game(FloatLayout):
     def show_tutorial(self, *args):
         global tutorial_label
         tutorial_label = TutorialLabel('hero 1 (male)\nis set active\nwhen game starts')
-        tutorial_label.pos_hint = controller.pos_hint
-        tutorial_label.size_hint = controller.size_hint
         firebttn.parent.add_widget(tutorial_label)
-        def step_0(self, *args):
-            tutorial_label.text='you can see his life\nindicators (hearts)in\nthe upper left corner'
+        def step_0(*args):
+            tutorial_label.text='you can see his life\nindicators (hearts) in\nthe upper left corner'
             tutorial_label.draw()
-        def step_1(self, *args):
+            m_x, m_y = 5./Window.width, 5./Window.height # margins
+            pos_x = hero1.hearts[0].pos_hint['x']-m_x
+            pos_y = hero1.hearts[0].pos_hint['y']-m_y
+            size_x = hero1.hearts[2].pos_hint['x']-hero1.hearts[0].pos_hint['x']+hero1.hearts[2].size_hint[0]+2*m_x
+            size_y = hero1.hearts[0].size_hint[1]+2*m_y
+            highlighter = TutorialHighlighter(pos_x, pos_y, size_x, size_y)
+            self.add_widget(highlighter)
+            Clock.schedule_once(highlighter.die, 5.) # remove highlighter
+        def step_1(*args):
             tutorial_label.text='you start at home\n(upper green row)\nwhere you are safe'
             tutorial_label.draw()
-        def step_2(self, *args):
+            m_x, m_y = 5./Window.width, 5./Window.height
+            pos_x = hero1.pos_hint['x']-(0.09*a/Window.width)-m_x
+            pos_y = hero1.pos_hint['y']-m_y
+            size_x = 0.9*a/Window.width+2*m_x
+            size_y = hero1.size_hint[1]+2*m_y
+            highlighter = TutorialHighlighter(pos_x, pos_y, size_x, size_y)
+            self.add_widget(highlighter)
+            Clock.schedule_once(highlighter.die, 5.) # remove highlighter
+        def step_2(*args):
             tutorial_label.text='use gamepad arrow\nkeys to move hero'
             tutorial_label.draw()
-        def step_3(self, *args):
+        def step_3(*args):
+            right_bttn.state='down'
             hero1.move('right')
-            global waiting
-            waiting = ['down']
-        def step_4(self, *args):
-            tutorial_label.text='press F to create red\nfire around hero'
+        def step_4(*args):
+            right_bttn.state='normal'
+            down_bttn.state='down'
+            hero1.move('down')
+        def step_5(*args):
+            down_bttn.state='normal'
+            tutorial_label.text='press F to create\nred fire around hero'
             tutorial_label.draw()
-        def step_5(self, *args):
-            tutorial_label.text='red fire\ndestroys enemies\nand burns trees\nyou cannot use\nit at home'
-            tutorial_label.draw()
-        def step_6(self, *args):
+            firebttn.state='down'
+        def step_6(*args):
             firebttn.fire()
-            hero1.move('right')
-        def step_7(self, *args):
-            firebttn.fire()
-            tutorial_label.text='items can be\ndiscovered when\nburning trees'
+            firebttn.state='normal'
+        def step_7(*args):
+            tutorial_label.text='red fire destroys\nenemies and burns\ntrees. you cannot\nuse it at home'
             tutorial_label.draw()
-        def step_8(self, *args):
-            tutorial_label.text='press H2 to activate\nhero 2 (female)'
+        def step_8(*args):
+            tutorial_label.text='items can be\ndiscovered when\nburning trees\n(now a sword)'
             tutorial_label.draw()
+        def step_9(*args):
+            tutorial_label.text='press H2 to activate\nhero 2 (female)\nher life indicators\nare now highlighted'
+            tutorial_label.draw()
+            m_x, m_y = 5./Window.width, 5./Window.height # margins
+            pos_x = hero2.hearts[0].pos_hint['x']-m_x
+            pos_y = hero2.hearts[0].pos_hint['y']-m_y
+            size_x = hero2.hearts[2].pos_hint['x']-hero2.hearts[0].pos_hint['x']+hero2.hearts[2].size_hint[0]+2*m_x
+            size_y = hero2.hearts[0].size_hint[1]+2*m_y
+            highlighter = TutorialHighlighter(pos_x, pos_y, size_x, size_y)
+            self.add_widget(highlighter)
+            Clock.schedule_once(highlighter.die, 5.) # remove highlighter
+            hero1_selector.state='normal'
+            hero2_selector.state='down'
             global active_hero
             active_hero = hero2
-        def step_9(self, *args):
+        def step_10(*args):
+            tutorial_label.text='grab items to gain\nextra powers\n(a sword expands\nyour fire range)'
+            tutorial_label.draw()
+            down_bttn.state='down'
+            hero2.move('down')
+        def step_11(*args):
             tutorial_label.text='hero 2 produces\ngreen fire which\ncan grow forests'
             tutorial_label.draw()
-            hero2.move('right')
-            global waiting
-            waiting = ['down']
-        def step_10(self, *args):
+            down_bttn.state='normal'
+            firebttn.state='down'
+            firebttn.fire()
+        def step_12(*args):
+            firebttn.state='normal'
             tutorial_label.text='forests are used\nby both heroes\nfor walking'
             tutorial_label.draw()
-        def step_11(self, *args):
-            tutorial_label.text='hero falls while\nnot in forest\nand does not stand\non a rock'
+        def step_13(*args):
+            tutorial_label.text='hero falls while\nnot in a forest\nand does not stand\non a rock'
             tutorial_label.draw()
-        def step_12(self, *args):
-            tutorial_label.text='next'
+        def step_14(*args):
+            tutorial_label.text='press P to protect\nactive hero from\nenemies for some time'
             tutorial_label.draw()
-        steps = [step_0, step_1, step_2, step_3, step_4, step_5, step_6, 
-                 step_7, step_8, step_9, step_10, step_11, step_12]
-        for i, step in enumerate(steps):
-            Clock.schedule_once(step, 10.*(i+1))
+            protectbttn.state='down'
+            protectbttn.protect()
+        def step_15(*args):
+            protectbttn.state='normal'
+            tutorial_label.text='you can only protect\none hero at any\ngiven moment'
+            tutorial_label.draw()
+        def step_16(*args):
+            tutorial_label.text='avoid falling on\nspikes or you\nlose one life'
+            tutorial_label.draw()
+            m_x, m_y = 5./Window.width, 5./Window.height
+            pos_x = hero1.pos_hint['x']-(2*0.09*a/Window.width)-m_x
+            pos_y = hero1.pos_hint['y']-m_y-(0.72*a/Window.height)
+            size_x = 0.9*a/Window.width+2*m_x
+            size_y = hero1.size_hint[1]+2*m_y
+            highlighter = TutorialHighlighter(pos_x, pos_y, size_x, size_y)
+            self.add_widget(highlighter)
+            Clock.schedule_once(highlighter.die, 5.) # remove highlighter
+        def step_17(*args):
+            tutorial_label.text='if one of the heroes\ndies the game is over'
+            tutorial_label.draw()
+        def step_18(*args):
+            tutorial_label.text='you can increase\nyou score by\nkilling enemies'
+            tutorial_label.draw()
+        def step_19(*args):
+            tutorial_label.text='when you reach 100\nscore points you win\nand you land is\nfree again!'
+            tutorial_label.draw()
+        def step_20(*args):
+            tutorial_label.text='you are now ready\nto play. the game\nwill start in\na few seconds'
+            tutorial_label.draw()
+        def step_21(*args):
+            global tutorial_mode
+            tutorial_mode = False
+            self.restart(False)
+        steps = [(5, step_0), (8, step_1), (3, step_2), (3, step_3),
+                 (3, step_4), (3, step_5), (3, step_6), (8, step_7), 
+                 (8, step_8), (8, step_9), (8, step_10), (6, step_11),
+                 (4, step_12), (8, step_13), (8, step_14), 
+                 (6, step_15), (8, step_16), (5, step_17), (5, step_18),
+                 (8, step_19), (6, step_20), (0, step_21)]
+        time = 5
+        for step in steps:
+            Clock.schedule_once(step[1], time)
+            time += step[0]
                
 class MainFrame(ScreenManager):
     def __init__(self, **kwargs):
