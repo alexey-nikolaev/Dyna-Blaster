@@ -1,6 +1,5 @@
 # Dyna-Blaster
 python+kivy based mobile game, 8bit style, can be built for Android and iOS
 
-languages: python 2, kivy
-
+languages: python 2, kivy/n
 requirements: kivy
