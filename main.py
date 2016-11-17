@@ -45,6 +45,7 @@ s_score = SoundLoader.load(join('sounds', 'score.mp3'))
 s_evil = SoundLoader.load(join('sounds', 'evil.mp3'))
 s_kill_enemy = SoundLoader.load(join('sounds', 'kill_enemy.mp3'))
 s_wind = SoundLoader.load(join('sounds', 'wind.mp3'))
+s_victory = SoundLoader.load(join('sounds', 'win.mp3'))
 
 # storage file
 storage = JsonStore('storage_file.json')
@@ -53,7 +54,7 @@ mflag = False # hero movement flag (including waiting list)
 anim_flag = False # hero animation flag
 waiting = [] # command waiting list
 game_ended = False # game end flag
-tutorial_mode = False # tutorial mode flag
+tutorial_mode = True # tutorial mode flag
 
 # world frame
 a = min(Window.width, Window.height)
@@ -238,11 +239,14 @@ class HomeLabel(Image):
         self.name='home_label'
         
 class GameOverLabel(Label):
-    def __init__(self, **kwargs):
+    def __init__(self, victory, **kwargs):
         super(GameOverLabel, self).__init__(**kwargs)
         self.name='game over'
         self.markup=True
-        self.text='[size=24sp]Game Over[/size]\n\nPress F to restart\n\nPress P to quit'
+        if victory:
+            self.text='[size=24sp]You Win![/size]\n\nPress F to restart\n\nPress P to quit'
+        else:
+            self.text='[size=24sp]Game Over[/size]\n\nPress F to restart\n\nPress P to quit'
         self.font_name='PressStart2P'
         self.halign='center'
         self.pos_hint={'center_x': (world_right+world_left)/(2.*Window.width), 'center_y': (world_top+world_bottom)/(2.*Window.height)}
@@ -297,6 +301,8 @@ class Item(Image):
             s_score.play()
             scorer.score += 3
             scorer.update()
+            if scorer.score>=100:
+                firebttn.parent.end_game(1, True)
         elif self.model == 'sword':
             s_sword.play()
             hero.expanded_fire = True # expand fire for 1 to 2 in each direction for 1 minute
@@ -395,13 +401,19 @@ class Flame(Image):
                 self.used = True
                 firebttn.parent.remove_widget(self)
                  # make changes in hero's hearts
-                num = int(ceil(hero.life/2.))-1
-                hero.hearts[num].st+=1
-                hero.hearts[num].update()
-                hero.life -= 1
-                # end game
-                if hero.life == 0: 
-                    firebttn.parent.end_game(i+1)
+                if self.model == 'blue_flame':
+                    damage=2 # blue flame takes 2 lives
+                else:
+                    damage=1
+                for i in range(damage):
+                    num = int(ceil(hero.life/2.))-1
+                    hero.hearts[num].st+=1
+                    hero.hearts[num].update()
+                    hero.life -= 1
+                    # end game
+                    if hero.life == 0: 
+                        firebttn.parent.end_game(i+1, False)
+                        break
     def die(self, *args):
         if not game_ended:
             firebttn.parent.remove_widget(self)
@@ -518,7 +530,7 @@ class Hero(Image):
                         if self.life == 0:
                             if self.model == 'warrior-m': hero_num = 1
                             else: hero_num = 2
-                            firebttn.parent.end_game(hero_num)
+                            firebttn.parent.end_game(hero_num, False)
                             break
                     else: 
                         self.pos_hint['y'] = (world_top-0.09*a)/Window.height
@@ -678,7 +690,7 @@ class Enemy(Hero): # based on Hero class
                             hero.life -= 1
                             # end game
                             if hero.life == 0: 
-                                firebttn.parent.end_game(i+1)
+                                firebttn.parent.end_game(i+1, False)
                             break
                 # recreate enemy if it leaves playing field
                 level = self.level
@@ -712,7 +724,7 @@ class Enemy(Hero): # based on Hero class
                             hero.life -= 1
                             # end game
                             if hero.life == 0: 
-                                firebttn.parent.end_game(i+1)
+                                firebttn.parent.end_game(i+1, False)
                             def move_after_biting(*args):
                                 self.update()
                                 self.move(dkeys[self.drct])
@@ -784,6 +796,8 @@ class CtrlBttn(Button):
             if self.name == 'right':
                 self.parent.parent.parent.current = 'highscore' # change current screenmanager's screen
             else: pass
+        elif tutorial_mode:
+            pass
         else:
             self.move_hero()
             Clock.schedule_interval(self.move_hero, 1./active_hero.speed) #append new moves every 1 second
@@ -861,6 +875,8 @@ class FireBttn(Button):
             self.parent.parent.parent.current = 'blank screen' # change current screenmanager's screen
         elif game_ended:
             self.parent.restart(False)
+        elif tutorial_mode:
+            pass
         else:
             if not self.fire_waiting and not (active_hero.model == 'warrior_m' and active_hero.center_y > world_top - 0.09*a): # red fire prohibited at home
                 self.fire_waiting = True
@@ -896,6 +912,8 @@ class FireBttn(Button):
                                             # add score
                                             scorer.score += 1
                                             scorer.update()
+                                            if scorer.score>=100:
+                                                firebttn.parent.end_game(True)
                                         elif wid.name == 'forest':
                                             wid.name = 'container' # turn forest into container
                                             wid.color = (0,0,0,0)
@@ -971,6 +989,8 @@ class ProtectBttn(Button):
             tutorial_mode = True
         elif game_ended:
             App.get_running_app().stop() # quit game
+        elif tutorial_mode:
+            pass
         else:
             # schedule hero protection
             if not self.protect_waiting:
@@ -1001,7 +1021,7 @@ class ProtectionFrame(Widget):
         self.name = 'protection'
         self.center_x, self.center_y = pos_x*Window.width+0.045*a, pos_y*Window.height+0.045*a
         with self.canvas:
-            self.color = Color(102./255.,217./255.,1.,1)
+            self.color = Color(139./255.,0,139./255.,1)
             Line(points=[self.center_x-0.09*a, self.center_y+0.09*a, self.center_x+0.09*a, self.center_y+0.09*a, self.center_x+0.09*a, self.center_y-0.09*a, self.center_x-0.09*a, self.center_y-0.09*a], width=5, cap='square', joint='miter', close=True)
         Clock.schedule_once(self.die, 5.) # protection ends after 5 seconds
     def die(self, dt):
@@ -1021,7 +1041,7 @@ class HeroSelector(ToggleButton):
         self.bind(on_press=self.set_active_hero)
         self.allow_no_selection=False # one of heroes should always be chosen
     def set_active_hero(self, *args):
-        if self.parent.name == 'start_layout': # alternative actions on start screen
+        if self.parent.name == 'start_layout' or tutorial_mode: # alternative actions on start screen
             pass
         else:
             global waiting
@@ -1261,17 +1281,20 @@ class Game(FloatLayout):
                 self.add_enemy(level)
         else:
             return False # unschedule event
-    def end_game(self, hero_num, *args):
+    def end_game(self, hero_num, victory, *args):
         global game_ended
         game_ended = True
         self.export_to_png('endscreen.png')
         self.clear_widgets()
-        self.add_widget(Image(source='endscreen.png', color=(0,1,0,0.99)))
-        heart = Heart(0, hero_num)
-        heart.source = join("hearts","2.png")
-        heart.color=(0,1,0,0.99)
-        self.add_widget(heart)
-        self.add_widget(GameOverLabel())
+        if victory:
+            self.add_widget(Image(source='endscreen.png', color=(0,0,1,0.99)))
+        else:
+            self.add_widget(Image(source='endscreen.png', color=(0,1,0,0.99)))
+            heart = Heart(0, hero_num)
+            heart.source = join("hearts","2.png")
+            heart.color=(0,1,0,0.99)
+            self.add_widget(heart)
+        self.add_widget(GameOverLabel(victory))
         # add controls
         for i, drct in zip(range(4), ['up','down','left','right']):
             self.add_widget(CtrlBttn(drct))
@@ -1284,10 +1307,14 @@ class Game(FloatLayout):
         self.add_widget(hero2_selector)
         protectbttn = ProtectBttn()
         self.add_widget(protectbttn)
-        self.add_widget(Controller(color=(0,1.,0,1.)))
         s_game.volume=0
         s_game.stop()
-        s_evil.play()
+        if victory:
+            self.add_widget(Controller(color=(0,0,1.,1.)))
+            s_victory.play()
+        else:
+            self.add_widget(Controller(color=(0,1.,0,1.)))
+            s_evil.play()
         # save highscore
         timestamp = datetime.strftime(datetime.now(), '%Y-%m-%d %H:%M')
         score = str(scorer.score)
