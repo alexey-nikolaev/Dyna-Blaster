@@ -961,6 +961,11 @@ class ProtectBttn(Button):
             s_intro.volume = 0
             s_intro.stop()
             s_select.play()
+            def play_sound(*args):
+                s_game.play()
+            def loop_sound(*args):
+                Clock.schedule_interval(play_sound, .001)
+            Clock.schedule_once(loop_sound, 2.)
             self.parent.parent.parent.current = 'blank screen' # change current screenmanager's screen
             global tutorial_mode
             tutorial_mode = True
