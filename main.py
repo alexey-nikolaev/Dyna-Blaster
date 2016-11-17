@@ -958,6 +958,9 @@ class ProtectBttn(Button):
         self.bind(on_press=self.schedule_protect)
     def schedule_protect(self, *args):
         if self.parent.name == 'start_layout': # alternative actions on start screen
+            s_intro.volume = 0
+            s_intro.stop()
+            s_select.play()
             self.parent.parent.parent.current = 'blank screen' # change current screenmanager's screen
             global tutorial_mode
             tutorial_mode = True
