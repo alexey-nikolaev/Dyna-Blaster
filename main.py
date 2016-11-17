@@ -664,6 +664,22 @@ class Enemy(Hero): # based on Hero class
             dkeys = {'0':'up', '1':'right', '2':'down', '3':'left'}
             dmoves = {'0':(0,1), '1':(1,0), '2':(0,-1), '3':(-1,0)}
             if (self.center_x > world_right) or (self.center_x < world_left) or (self.center_y > world_top-2*0.09*a) or (self.center_y < world_bottom+2*0.09*a):
+                for i, hero in enumerate([hero1, hero2]):
+                    if hero.collide_point(self.center_x, self.center_y) and not self.used:
+                        if self.level == -1:
+                            s_hit.play()
+                            self.used = True
+                            self.st = 7
+                            self.update()
+                            # make changes in hero's hearts
+                            num = int(ceil(hero.life/2.))-1
+                            hero.hearts[num].st+=1
+                            hero.hearts[num].update()
+                            hero.life -= 1
+                            # end game
+                            if hero.life == 0: 
+                                firebttn.parent.end_game(i+1)
+                            break
                 # recreate enemy if it leaves playing field
                 level = self.level
                 firebttn.parent.remove_widget(self)
@@ -886,7 +902,10 @@ class FireBttn(Button):
                                             wid.source = ''
                                             if not (shift_x == 0 and shift_y == 0): # disclose items with 1/2 probabilty when burning forest, not at hero's position
                                                 chance = choice(range(2))
-                                                model = choice(['star','medikit', 'sword', 'potion', 'boots'])
+                                                if tutorial_mode: 
+                                                    model = 'sword'
+                                                else:
+                                                    model = choice(['star','medikit', 'sword', 'potion', 'boots'])
                                                 if chance == 0:
                                                     item = Item(model,(active_hero.x+shift_x*0.09*a+0.045*a)/Window.width, (active_hero.y+shift_y*0.09*a+0.045*a)/Window.height)
                                                     firebttn.parent.add_widget(item)
@@ -1145,7 +1164,8 @@ class Game(FloatLayout):
         protectbttn = ProtectBttn()
         self.add_widget(protectbttn)
         # add new enemy every 10 seconds if conditions are met
-        Clock.schedule_interval(self.control_enemies_number, 10.)
+        if not tutorial_mode:
+            Clock.schedule_interval(self.control_enemies_number, 10.)
         # add hearts
         for i in range(6):
             if i<3: 
