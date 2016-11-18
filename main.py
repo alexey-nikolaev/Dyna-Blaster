@@ -55,6 +55,7 @@ anim_flag = False # hero animation flag
 waiting = [] # command waiting list
 game_ended = False # game end flag
 tutorial_mode = True # tutorial mode flag
+previous_item = '' # global variable introduced to avoid repeating items
 
 # world frame
 a = min(Window.width, Window.height)
@@ -179,10 +180,14 @@ class HighscoreScreen(Screen):
         try: 
             storage.get('highscore')
         except KeyError:
-            storage.put('highscore', score = 0, datetime = 'no highscores yet')
+            storage.put('highscore', score = 0, datetime = 'no highscores yet', ptime = '')
         score = storage.get('highscore')['score']
         datetime = storage.get('highscore')['datetime']
-        text = "highscore: %s\n\n\n%s" % (score, datetime)
+        ptime = storage.get('highscore')['ptime']
+        if datetime == 'no highscores yet':
+            text = 'no highscores yet'
+        else:
+            text = "highscore: %s\n\n\ntime: %s\n\n\n%s" % (score, ptime, datetime)
         label = self.children[0]
         label.text = text
 
@@ -472,7 +477,7 @@ class Hero(Image):
             if drct == 'up':
                 esaflag = True # empty space above hero flag
                 for wid in firebttn.parent.children:
-                    if wid.name in ['forest', 'item', 'home']:
+                    if wid.name in ['forest', 'home']:
                         if wid.collide_point(fut_center_x, fut_center_y):
                             esaflag = False
                             break
@@ -519,6 +524,8 @@ class Hero(Image):
             self.st = 0
             # die on spikes (minus one heart and return home)
             if self.y < world_bottom+0.09*a:
+                m=0.05*a
+                self.pos_hint['y'] = (b-(3*m+1.08*a))/Window.height
                 s_spikes.play()
                 def die_on_spikes(*args):
                     # make changes in hero's hearts
@@ -874,6 +881,8 @@ class FireBttn(Button):
             Clock.schedule_once(loop_sound, 2.)
             global tutorial_mode
             tutorial_mode = False
+            global start_time
+            start_time = datetime.now()
             self.parent.parent.parent.current = 'blank screen' # change current screenmanager's screen
         elif game_ended:
             self.parent.restart(False)
@@ -921,15 +930,20 @@ class FireBttn(Button):
                                             wid.color = (0,0,0,0)
                                             wid.source = ''
                                             if not (shift_x == 0 and shift_y == 0): # disclose items with 1/2 probabilty when burning forest, not at hero's position
-                                                chance = choice(range(2))
+                                                chance = choice(range(4)) # 1/4 probability
                                                 if tutorial_mode: 
                                                     model = 'sword'
                                                 else:
-                                                    model = choice(['star','medikit', 'sword', 'potion', 'boots'])
+                                                    while True:
+                                                        model = choice(['star','medikit', 'sword', 'potion', 'boots'])
+                                                        if not model == previous_item: # avoid repeating items
+                                                            break
                                                 if chance == 0:
                                                     item = Item(model,(active_hero.x+shift_x*0.09*a+0.045*a)/Window.width, (active_hero.y+shift_y*0.09*a+0.045*a)/Window.height)
                                                     firebttn.parent.add_widget(item)
                                                     item.update()
+                                                    global previous_item
+                                                    previous_item = model
                     else: # green fire
                         stop = False
                         for wid in self.parent.children:
@@ -1146,8 +1160,8 @@ class Game(FloatLayout):
                     wid.name = 'forest'
         for i in range(10):
             self.add_widget(HomeTile((m+0.09*a*i)/Window.width, (b-0.24*a)/Window.height, p1/2., p2/2.))
-            self.add_widget(HomeLabel(m/Window.width, (b-0.2775*a)/Window.height, p1/2., (p2*(15/27.))/2.))
             self.add_widget(Spikes((m+0.09*a*i)/Window.width, (b-(3*m+1.08*a))/Window.height, p1/2., p2/2.))
+        self.add_widget(HomeLabel(m/Window.width, (b-0.2775*a)/Window.height, p1/2., (p2*(15/27.))/2.))
         # add heroes and place them on home tiles randomly
         c1 = choice(range(10)) # avoid placing place heroes at the same position
         c2 = c1
@@ -1311,9 +1325,17 @@ class Game(FloatLayout):
             self.add_widget(Controller(color=(0,1.,0,1.)))
             s_evil.play()
         # save highscore
+        end_time = datetime.now()
+        ptime = end_time - start_time
+        ptime_str = str(int(ptime.total_seconds() // 60)) + " min " + str(int(ptime.total_seconds() % 60)) + " sec"
         timestamp = datetime.strftime(datetime.now(), '%Y-%m-%d %H:%M')
-        score = str(scorer.score)
-        storage.put('highscore', score = score, datetime = timestamp)
+        try: 
+            storage.get('highscore')
+        except KeyError:
+            storage.put('highscore', score = 0, datetime = 'no highscores yet', ptime = '')
+        if scorer.score > int(storage.get('highscore')['score']):
+            score = str(scorer.score)
+            storage.put('highscore', score = score, datetime = timestamp, ptime = ptime_str)
     def show_tutorial(self, *args):
         global tutorial_label
         tutorial_label = TutorialLabel('hero 1 (male)\nis set active\nwhen game starts')
@@ -1437,6 +1459,8 @@ class Game(FloatLayout):
             def loop_sound(*args):
                 Clock.schedule_interval(play_sound, .001)
             Clock.schedule_once(loop_sound, 2.)
+            global start_time
+            start_time = datetime.now()
             self.restart(False)
         steps = [(5, step_0), (8, step_1), (3, step_2), (3, step_3),
                  (3, step_4), (3, step_5), (3, step_6), (8, step_7), 
