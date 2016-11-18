@@ -356,6 +356,7 @@ class Flame(Image):
         self.pos_hint={'center_x': self.path[self.fst][0]/Window.width, 'center_y': self.path[self.fst][1]/Window.height}
         self.size_hint=(0.06*a/Window.width,0.06*a/Window.height)
         self.name='flame'
+        self.base=base
         self.used=False # flag to exclude double life decrease
         self.creator=creator # object property, enemy which created this flame
         Clock.schedule_interval(self.update, .1)
@@ -390,9 +391,16 @@ class Flame(Image):
         # rotate back
         self.path = [(base[0]+p[0]*cos(phi)-p[1]*sin(phi), base[1]+p[0]*sin(phi)+p[1]*cos(phi)) for p in path_rotated]
     def fly_to_target(self, *args):
-        self.fst+=1
-        self.pos_hint={'center_x': self.path[self.fst][0]/Window.width, 'center_y': self.path[self.fst][1]/Window.height}
-        self.hit()
+        # check for self-levitating flames
+        for wid in firebttn.parent.children:
+            if wid.name == 'enemy':
+                if wid.collide_point(self.base[0], self.base[1]):
+                    self.fst+=1
+                    self.pos_hint={'center_x': self.path[self.fst][0]/Window.width, 'center_y': self.path[self.fst][1]/Window.height}
+                    self.hit()
+                    break
+        else:
+            firebttn.parent.remove_widget(self)
     def hit(self, *args):
         for i, hero in enumerate([hero1, hero2]):
             # destroy flames in protected area
@@ -524,8 +532,6 @@ class Hero(Image):
             self.st = 0
             # die on spikes (minus one heart and return home)
             if self.y < world_bottom+0.09*a:
-                m=0.05*a
-                self.pos_hint['y'] = (b-(3*m+1.08*a))/Window.height
                 s_spikes.play()
                 def die_on_spikes(*args):
                     # make changes in hero's hearts
@@ -1032,7 +1038,7 @@ class ProtectionFrame(Widget):
         self.name = 'protection'
         self.center_x, self.center_y = pos_x*Window.width+0.045*a, pos_y*Window.height+0.045*a
         with self.canvas:
-            self.color = Color(139./255.,0,139./255.,1)
+            self.color = Color(160./255.,160./255,160./255.,1)
             Line(points=[self.center_x-0.09*a, self.center_y+0.09*a, self.center_x+0.09*a, self.center_y+0.09*a, self.center_x+0.09*a, self.center_y-0.09*a, self.center_x-0.09*a, self.center_y-0.09*a], width=5, cap='square', joint='miter', close=True)
         Clock.schedule_once(self.die, 5.) # protection ends after 5 seconds
     def die(self, dt):
