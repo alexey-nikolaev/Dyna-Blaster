@@ -872,6 +872,8 @@ class FireBttn(Button):
             def loop_sound(*args):
                 Clock.schedule_interval(play_sound, .001)
             Clock.schedule_once(loop_sound, 2.)
+            global tutorial_mode
+            tutorial_mode = False
             self.parent.parent.parent.current = 'blank screen' # change current screenmanager's screen
         elif game_ended:
             self.parent.restart(False)
@@ -979,11 +981,6 @@ class ProtectBttn(Button):
             s_intro.volume = 0
             s_intro.stop()
             s_select.play()
-            def play_sound(*args):
-                s_game.play()
-            def loop_sound(*args):
-                Clock.schedule_interval(play_sound, .001)
-            Clock.schedule_once(loop_sound, 2.)
             self.parent.parent.parent.current = 'blank screen' # change current screenmanager's screen
             global tutorial_mode
             tutorial_mode = True
@@ -1111,8 +1108,6 @@ class Game(FloatLayout):
         anim_flag = False
         global waiting
         waiting = []
-        s_game.volume = 1
-        s_game.play()
     def __init__(self, fixed=True, **kwargs):
         super(Game, self).__init__(**kwargs)
         self.name = 'game layout'
@@ -1437,6 +1432,11 @@ class Game(FloatLayout):
         def step_21(*args):
             global tutorial_mode
             tutorial_mode = False
+            def play_sound(*args):
+                s_game.play()
+            def loop_sound(*args):
+                Clock.schedule_interval(play_sound, .001)
+            Clock.schedule_once(loop_sound, 2.)
             self.restart(False)
         steps = [(5, step_0), (8, step_1), (3, step_2), (3, step_3),
                  (3, step_4), (3, step_5), (3, step_6), (8, step_7), 
